@@ -11,8 +11,8 @@ from torchvision.utils import save_image
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
-from models import *
-from datasets import *
+from models import Generator, Encoder, MultiDiscriminator, weights_init_normal
+from datasets import ImageDataset
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -52,13 +52,18 @@ def load_models(opt, input_shape, cuda):
         D_LR = D_LR.cuda()
 
     if opt.epoch != 0:
-        # Load pretrained models
-        generator.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"generator_{opt.epoch}.pth")))
-        encoder.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"encoder_{opt.epoch}.pth")))
-        D_VAE.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"D_VAE_{opt.epoch}.pth")))
-        D_LR.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"D_LR_{opt.epoch}.pth")))
+        try:
+            generator.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"generator_{opt.epoch}.pth")))
+            encoder.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"encoder_{opt.epoch}.pth")))
+            D_VAE.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"D_VAE_{opt.epoch}.pth")))
+            D_LR.load_state_dict(torch.load(os.path.join("saved_models", opt.dataset_name, f"D_LR_{opt.epoch}.pth")))
+        except FileNotFoundError as e:
+            print(f"Error loading models: {e}")
+            print("Training from scratch.")
+            generator.apply(weights_init_normal)
+            D_VAE.apply(weights_init_normal)
+            D_LR.apply(weights_init_normal)
     else:
-        # Initialize weights
         generator.apply(weights_init_normal)
         D_VAE.apply(weights_init_normal)
         D_LR.apply(weights_init_normal)
@@ -128,9 +133,6 @@ def main():
         num_workers=1,
     )
 
-    # ----------
-    #  Training
-    # ----------
     valid = 1
     fake = 0
     prev_time = time.time()

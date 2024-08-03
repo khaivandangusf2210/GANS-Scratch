@@ -9,11 +9,9 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 
-
 def create_directories():
     os.makedirs("images", exist_ok=True)
     os.makedirs("../../data/mnist", exist_ok=True)
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -29,7 +27,6 @@ def parse_arguments():
     parser.add_argument("--channels", type=int, default=1, help="number of image channels")
     parser.add_argument("--sample_interval", type=int, default=400, help="interval between image sampling")
     return parser.parse_args()
-
 
 class Generator(nn.Module):
     def __init__(self, latent_dim, n_classes, img_shape):
@@ -59,7 +56,6 @@ class Generator(nn.Module):
         img = img.view(img.size(0), *self.img_shape)
         return img
 
-
 class Discriminator(nn.Module):
     def __init__(self, n_classes, img_shape):
         super(Discriminator, self).__init__()
@@ -82,7 +78,6 @@ class Discriminator(nn.Module):
         validity = self.model(d_in)
         return validity
 
-
 def load_data(img_size, batch_size):
     dataloader = DataLoader(
         datasets.MNIST(
@@ -100,15 +95,13 @@ def load_data(img_size, batch_size):
     )
     return dataloader
 
-
 def sample_image(n_row, batches_done, generator, latent_dim, n_classes, img_shape, device):
     """Saves a grid of generated digits ranging from 0 to n_classes"""
     z = Variable(torch.randn(n_row ** 2, latent_dim).to(device))
     labels = np.array([num for _ in range(n_row) for num in range(n_row)])
     labels = Variable(torch.LongTensor(labels).to(device))
     gen_imgs = generator(z, labels)
-    save_image(gen_imgs.data, "images/%d.png" % batches_done, nrow=n_row, normalize=True)
-
+    save_image(gen_imgs.data, f"images/{batches_done}.png", nrow=n_row, normalize=True)
 
 def train(generator, discriminator, dataloader, opt, device):
     adversarial_loss = nn.MSELoss()
@@ -126,28 +119,23 @@ def train(generator, discriminator, dataloader, opt, device):
             real_imgs = Variable(imgs.type(torch.FloatTensor).to(device))
             labels = Variable(labels.type(torch.LongTensor).to(device))
 
+            # Train Generator
             optimizer_G.zero_grad()
-
             z = Variable(torch.randn(batch_size, opt.latent_dim).to(device))
             gen_labels = Variable(torch.LongTensor(np.random.randint(0, opt.n_classes, batch_size)).to(device))
             gen_imgs = generator(z, gen_labels)
-
             validity = discriminator(gen_imgs, gen_labels)
             g_loss = adversarial_loss(validity, valid)
-
             g_loss.backward()
             optimizer_G.step()
 
+            # Train Discriminator
             optimizer_D.zero_grad()
-
             validity_real = discriminator(real_imgs, labels)
             d_real_loss = adversarial_loss(validity_real, valid)
-
             validity_fake = discriminator(gen_imgs.detach(), gen_labels)
             d_fake_loss = adversarial_loss(validity_fake, fake)
-
             d_loss = (d_real_loss + d_fake_loss) / 2
-
             d_loss.backward()
             optimizer_D.step()
 
@@ -162,12 +150,10 @@ def train(generator, discriminator, dataloader, opt, device):
                              latent_dim=opt.latent_dim, n_classes=opt.n_classes,
                              img_shape=img_shape, device=device)
 
-
 def main():
     create_directories()
     opt = parse_arguments()
     img_shape = (opt.channels, opt.img_size, opt.img_size)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     generator = Generator(opt.latent_dim, opt.n_classes, img_shape).to(device)
@@ -176,7 +162,6 @@ def main():
     dataloader = load_data(opt.img_size, opt.batch_size)
 
     train(generator, discriminator, dataloader, opt, device)
-
 
 if __name__ == "__main__":
     main()

@@ -1,16 +1,14 @@
 import argparse
 import os
 import numpy as np
-
+import torch
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torch.autograd import Variable
-
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
 
 def create_directories():
     os.makedirs("images", exist_ok=True)
@@ -111,6 +109,7 @@ def train(generator, discriminator, dataloader, opt, device):
 
             real_imgs = Variable(imgs.type(torch.FloatTensor).to(device))
 
+            # Train Generator
             optimizer_G.zero_grad()
 
             z = Variable(torch.randn(batch_size, opt.latent_dim).to(device))
@@ -121,6 +120,7 @@ def train(generator, discriminator, dataloader, opt, device):
             g_loss.backward()
             optimizer_G.step()
 
+            # Train Discriminator
             optimizer_D.zero_grad()
 
             validity_real = discriminator(real_imgs)

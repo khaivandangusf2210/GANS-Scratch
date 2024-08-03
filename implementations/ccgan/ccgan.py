@@ -1,10 +1,8 @@
 import os
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torchvision import transforms
 from torchvision.utils import save_image
 from PIL import Image
 import argparse
@@ -34,6 +32,20 @@ def setup_transforms(img_size):
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ]
+
+def apply_random_mask(imgs, img_size, mask_size):
+    masked_imgs = imgs.clone()
+    for img in masked_imgs:
+        x = np.random.randint(0, img_size - mask_size)
+        y = np.random.randint(0, img_size - mask_size)
+        img[:, y:y+mask_size, x:x+mask_size] = 0
+    return masked_imgs
+
+def save_samples_if_needed(saved_samples, real_imgs, masked_imgs, imgs_lr, batch_index, sample_interval):
+    if batch_index % sample_interval == 0:
+        save_image(real_imgs.data[:25], f"images/real_{batch_index}.png", nrow=5, normalize=True)
+        save_image(masked_imgs.data[:25], f"images/masked_{batch_index}.png", nrow=5, normalize=True)
+        save_image(imgs_lr.data[:25], f"images/lr_{batch_index}.png", nrow=5, normalize=True)
 
 def train_epoch(generator, discriminator, dataloader, optimizer_G, optimizer_D, cuda, Tensor, adversarial_loss, saved_samples, opt):
     for i, batch in enumerate(dataloader):

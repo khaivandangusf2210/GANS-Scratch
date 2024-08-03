@@ -1,32 +1,22 @@
 from __future__ import print_function
 
-try:
-    import argparse
-    import os
-    import numpy as np
+import argparse
+import os
+import numpy as np
 
-    from torch.autograd import Variable
-    from torch.autograd import grad as torch_grad
-    
-    import torch
-    import torchvision
-    import torch.nn as nn
-    import torch.nn.functional as F
-    from torch.utils.data import DataLoader
-    from torchvision import datasets
-    import torchvision.transforms as transforms
-    from torchvision.utils import save_image
-    
-    from itertools import chain as ichain
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torch.autograd import Variable, grad as torch_grad
+import torchvision.transforms as transforms
+from torchvision import datasets
+from torchvision.utils import save_image
 
-except ImportError as e:
-    print(e)
-    raise ImportError
-
+from itertools import chain as ichain
 
 def create_directories():
     os.makedirs("images", exist_ok=True)
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="ClusterGAN Training Script")
@@ -39,43 +29,38 @@ def parse_arguments():
     parser.add_argument("-w", "--wass_flag", dest="wass_flag", action='store_true', help="Flag for Wasserstein metric")
     return parser.parse_args()
 
-
 def sample_z(shape=64, latent_dim=10, n_c=10, fix_class=-1, req_grad=False):
     assert (fix_class == -1 or (fix_class >= 0 and fix_class < n_c)), f"Requested class {fix_class} outside bounds."
 
-    Tensor = torch.cuda.FloatTensor
+    Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
     zn = Variable(Tensor(0.75 * np.random.normal(0, 1, (shape, latent_dim))), requires_grad=req_grad)
-
     zc_FT = Tensor(shape, n_c).fill_(0)
     zc_idx = torch.empty(shape, dtype=torch.long)
 
     if fix_class == -1:
-        zc_idx = zc_idx.random_(n_c).cuda()
+        zc_idx = zc_idx.random_(n_c).cuda() if torch.cuda.is_available() else zc_idx.random_(n_c)
         zc_FT = zc_FT.scatter_(1, zc_idx.unsqueeze(1), 1.)
     else:
         zc_idx[:] = fix_class
         zc_FT[:, fix_class] = 1
 
-        zc_idx = zc_idx.cuda()
-        zc_FT = zc_FT.cuda()
+        zc_idx = zc_idx.cuda() if torch.cuda.is_available() else zc_idx
+        zc_FT = zc_FT.cuda() if torch.cuda.is_available() else zc_FT
 
     zc = Variable(zc_FT, requires_grad=req_grad)
 
     return zn, zc, zc_idx
 
-
 def calc_gradient_penalty(netD, real_data, generated_data, LAMBDA=10):
     b_size = real_data.size()[0]
-
-    alpha = torch.rand(b_size, 1, 1, 1).expand_as(real_data).cuda()
+    alpha = torch.rand(b_size, 1, 1, 1).expand_as(real_data).cuda() if torch.cuda.is_available() else torch.rand(b_size, 1, 1, 1).expand_as(real_data)
     interpolated = alpha * real_data.data + (1 - alpha) * generated_data.data
-    interpolated = Variable(interpolated, requires_grad=True).cuda()
+    interpolated = Variable(interpolated, requires_grad=True).cuda() if torch.cuda.is_available() else Variable(interpolated, requires_grad=True)
 
     prob_interpolated = netD(interpolated)
-
     gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
-                           grad_outputs=torch.ones(prob_interpolated.size()).cuda(),
+                           grad_outputs=torch.ones(prob_interpolated.size()).cuda() if torch.cuda.is_available() else torch.ones(prob_interpolated.size()),
                            create_graph=True, retain_graph=True)[0]
 
     gradients = gradients.view(b_size, -1)
@@ -83,23 +68,18 @@ def calc_gradient_penalty(netD, real_data, generated_data, LAMBDA=10):
 
     return LAMBDA * ((gradients_norm - 1) ** 2).mean()
 
-
 def initialize_weights(net):
     for m in net.modules():
-        if isinstance(m, nn.Conv2d):
-            m.weight.data.normal_(0, 0.02)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.ConvTranspose2d):
-            m.weight.data.normal_(0, 0.02)
-            m.bias.data.zero_()
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+            nn.init.normal_(m.weight.data, 0.0, 0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias.data, 0)
         elif isinstance(m, nn.Linear):
-            m.weight.data.normal_(0, 0.02)
-            m.bias.data.zero_()
-
+            nn.init.normal_(m.weight.data, 0.0, 0.02)
+            nn.init.constant_(m.bias.data, 0)
 
 def softmax(x):
     return F.softmax(x, dim=1)
-
 
 class Reshape(nn.Module):
     def __init__(self, shape=[]):
@@ -108,10 +88,9 @@ class Reshape(nn.Module):
 
     def forward(self, x):
         return x.view(x.size(0), *self.shape)
-    
-    def extra_repr(self):
-        return 'shape={}'.format(self.shape)
 
+    def extra_repr(self):
+        return f'shape={self.shape}'
 
 class Generator_CNN(nn.Module):
     def __init__(self, latent_dim, n_c, x_shape, verbose=False):
@@ -151,7 +130,6 @@ class Generator_CNN(nn.Module):
         x_gen = x_gen.view(x_gen.size(0), *self.x_shape)
         return x_gen
 
-
 class Encoder_CNN(nn.Module):
     def __init__(self, latent_dim, n_c, verbose=False):
         super(Encoder_CNN, self).__init__()
@@ -184,11 +162,10 @@ class Encoder_CNN(nn.Module):
     def forward(self, in_feat):
         z_img = self.model(in_feat)
         z = z_img.view(z_img.shape[0], -1)
-        zn = z[:, 0:self.latent_dim]
+        zn = z[:, :self.latent_dim]
         zc_logits = z[:, self.latent_dim:]
         zc = softmax(zc_logits)
         return zn, zc, zc_logits
-
 
 class Discriminator_CNN(nn.Module):
     def __init__(self, wass_metric=False, verbose=False):
@@ -225,7 +202,6 @@ class Discriminator_CNN(nn.Module):
         validity = self.model(img)
         return validity
 
-
 def main():
     create_directories()
     args = parse_arguments()
@@ -258,15 +234,15 @@ def main():
     cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if cuda else 'cpu')
 
-    # Loss function
+    # Loss functions
     bce_loss = torch.nn.BCELoss()
     xe_loss = torch.nn.CrossEntropyLoss()
     mse_loss = torch.nn.MSELoss()
 
     # Initialize models
-    generator = Generator_CNN(latent_dim, n_c, x_shape)
-    encoder = Encoder_CNN(latent_dim, n_c)
-    discriminator = Discriminator_CNN(wass_metric=wass_metric)
+    generator = Generator_CNN(latent_dim, n_c, x_shape, verbose=True)
+    encoder = Encoder_CNN(latent_dim, n_c, verbose=True)
+    discriminator = Discriminator_CNN(wass_metric=wass_metric, verbose=True)
 
     if cuda:
         generator.cuda()

@@ -1,30 +1,28 @@
 import glob
 import os
-import numpy as np
-from torch.utils.data import Dataset
 from PIL import Image
+from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
 class ImageDataset(Dataset):
-    def __init__(self, root, transforms_x=None, transforms_lr=None, mode='train'):
-        self.transform_x = transforms.Compose(transforms_x) if transforms_x else None
-        self.transform_lr = transforms.Compose(transforms_lr) if transforms_lr else None
-
-        # Filter to include only image files
-        self.files = sorted(glob.glob(f'{root}/*.*'))
-        self.files = [file for file in self.files if file.lower().endswith(('png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'))]
+    def __init__(self, root, transforms_x=None, transforms_lr=None):
+        self.transform_x = transforms.Compose(transforms_x) if transforms_x else lambda x: x
+        self.transform_lr = transforms.Compose(transforms_lr) if transforms_lr else lambda x: x
+        
+        # Collecting valid image files
+        self.files = sorted([f for f in glob.glob(os.path.join(root, '*')) if f.lower().endswith(('png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'))])
 
     def __getitem__(self, index):
+        file_path = self.files[index % len(self.files)]
         try:
-            img = Image.open(self.files[index % len(self.files)]).convert('RGB')
+            img = Image.open(file_path).convert('RGB')
         except Exception as e:
-            print(f"Error loading image {self.files[index % len(self.files)]}: {e}")
-            return None
+            raise RuntimeError(f"Error loading image {file_path}: {e}")
 
-        x = self.transform_x(img) if self.transform_x else img
-        x_lr = self.transform_lr(img) if self.transform_lr else img
-
-        return {'x': x, 'x_lr': x_lr}
+        return {
+            'x': self.transform_x(img),
+            'x_lr': self.transform_lr(img)
+        }
 
     def __len__(self):
         return len(self.files)

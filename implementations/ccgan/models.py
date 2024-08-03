@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-# U-NET
+# U-NET Downsampling Block
 class UNetDown(nn.Module):
     def __init__(self, in_size, out_size, normalize=True, dropout=0.0):
         """
@@ -19,7 +19,7 @@ class UNetDown(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-
+# U-NET Upsampling Block
 class UNetUp(nn.Module):
     def __init__(self, in_size, out_size, dropout=0.0):
         """
@@ -39,7 +39,7 @@ class UNetUp(nn.Module):
         x = self.model(x)
         return torch.cat((x, skip_input), 1)
 
-
+# Generator Model
 class Generator(nn.Module):
     def __init__(self, input_shape):
         """
@@ -87,7 +87,7 @@ class Generator(nn.Module):
 
         return self.final(u5)
 
-
+# Discriminator Model
 class Discriminator(nn.Module):
     def __init__(self, input_shape):
         """
