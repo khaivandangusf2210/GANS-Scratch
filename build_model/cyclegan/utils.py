@@ -1,37 +1,40 @@
 import random
-from torch.autograd import Variable
 import torch
-import numpy as np
-from typing import List, Union
+from torch.autograd import Variable
 
 
 class ReplayBuffer:
-
     def __init__(self, max_size: int = 50):
-        assert max_size > 0, "Buffer size must be greater than 0."
+        if max_size <= 0:
+            raise ValueError("Buffer size must be greater than 0.")
         self.max_size = max_size
         self.data = []
 
     def push_and_pop(self, data: torch.Tensor) -> Variable:
+        data_len = len(self.data)
         to_return = []
-        for element in data.data:
-            element = torch.unsqueeze(element, 0)
-            if len(self.data) < self.max_size:
+
+        for element in data:
+            element = element.unsqueeze(0)
+            if data_len < self.max_size:
                 self.data.append(element)
                 to_return.append(element)
+                data_len += 1
             else:
-                if random.uniform(0, 1) > 0.5:
-                    i = random.randint(0, self.max_size - 1)
-                    to_return.append(self.data[i].clone())
-                    self.data[i] = element
+                if random.random() > 0.5:
+                    idx = random.randint(0, self.max_size - 1)
+                    to_return.append(self.data[idx].clone())
+                    self.data[idx] = element
                 else:
                     to_return.append(element)
+
         return Variable(torch.cat(to_return))
 
 
 class LambdaLR:
     def __init__(self, n_epochs: int, offset: int, decay_start_epoch: int):
-        assert (n_epochs - decay_start_epoch) > 0, "Decay must start before the training session ends!"
+        if (n_epochs - decay_start_epoch) <= 0:
+            raise ValueError("Decay must start before the training session ends!")
         self.n_epochs = n_epochs
         self.offset = offset
         self.decay_start_epoch = decay_start_epoch
