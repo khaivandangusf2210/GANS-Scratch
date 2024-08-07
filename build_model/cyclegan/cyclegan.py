@@ -226,4 +226,5 @@ if __name__ == "__main__":
     opt = parse_args()
     setup_logging()
     prepare_directories(opt.dataset_name)
-    train(opt)
+    
+
